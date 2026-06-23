@@ -23,7 +23,7 @@ services:
 ##### MC-INFRA-CONNECTOR #########################################################################################################################
 
   mc-infra-connector:
-    image: cloudbaristaorg/cb-spider:0.12.23
+    image: cloudbaristaorg/cb-spider:0.12.32
     pull_policy: missing
     container_name: mc-infra-connector
     restart: unless-stopped
@@ -56,7 +56,7 @@ services:
 ##### MC-INFRA-MANAGER #########################################################################################################################
 
   mc-infra-manager:
-    image: cloudbaristaorg/cb-tumblebug:0.12.12
+    image: cloudbaristaorg/cb-tumblebug:0.12.18
     container_name: mc-infra-manager
     restart: unless-stopped
     pull_policy: missing
@@ -227,7 +227,7 @@ services:
 
   # CB-MapUI is a Web-based test client (disable it for production use)
   cb-mapui:
-    image: cloudbaristaorg/cb-mapui:0.12.34
+    image: cloudbaristaorg/cb-mapui:0.12.39
     container_name: cb-mapui
     networks:
       - mc-infra-manager-network
@@ -354,6 +354,7 @@ services:
       - "${MC_WORKFLOW_MANAGER_PROXY_PORT}:${MC_WORKFLOW_MANAGER_PROXY_PORT}"
       - "${MC_DATA_MANAGER_PROXY_PORT}:${MC_DATA_MANAGER_PROXY_PORT}"
       - "${MC_APPLICATION_MANAGER_PROXY_PORT}:${MC_APPLICATION_MANAGER_PROXY_PORT}"
+      - "${MC_OBSERVABILITY_FRONT_PORT}:${MC_OBSERVABILITY_FRONT_PORT}"
     environment:
       - DOMAIN_NAME=${MC_IAM_MANAGER_PUBLIC_DOMAIN}
     volumes:
@@ -628,7 +629,7 @@ services:
       - mc-web-console-network
     ports:
       - target: 8095
-        published: ${MC_COST_OPTIMIZER_GCP_COLLECTOR_PORT}
+        published: ${CO_GCP_COLLECTOR_PORT}
         protocol: tcp
     depends_on:
       - mc-cost-optimizer-db
@@ -789,7 +790,7 @@ services:
       - mc-web-console-network
     ports:
       - target: 8096
-        published: ${MC_COST_OPTIMIZER_ML_SCORER_PORT}
+        published: ${CO_ML_SCORER_PORT}
         protocol: tcp
     depends_on:
       - mc-cost-optimizer-db
@@ -872,6 +873,7 @@ services:
   mc-application-manager-sonatype-nexus:
     image: sonatype/nexus3:latest
     container_name: mc-application-manager-sonatype-nexus
+    restart: unless-stopped
     platform: linux/amd64
     networks:
       - mc-application-manager-network
@@ -894,10 +896,17 @@ services:
       <<: *default-health-check
 
   mc-application-manager:
-    image: cloudbaristaorg/mc-application-manager:0.5.2
+    image: cloudbaristaorg/mc-application-manager:0.5.4
     container_name: mc-application-manager
+    restart: unless-stopped
     depends_on:
       mc-application-manager-db:
+        condition: service_healthy
+      mc-application-manager-sonatype-nexus:
+        condition: service_started
+      mc-infra-manager:
+        condition: service_healthy
+      mc-observability-rabbitmq:
         condition: service_healthy
     networks:
       - mc-application-manager-network
@@ -956,9 +965,13 @@ services:
 
 
   mc-workflow-manager:
-    image: cloudbaristaorg/mc-workflow-manager:0.5.2
+    image: cloudbaristaorg/mc-workflow-manager:0.5.3
     container_name: mc-workflow-manager
     platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      mc-workflow-manager-jenkins:
+        condition: service_healthy
     networks:
       - mc-workflow-manager-network
       - mc-web-console-network
@@ -1026,6 +1039,7 @@ services:
   mc-data-manager-db:
     image: mariadb:latest
     container_name: mc-data-manager-db
+    restart: always
     command:
       - --skip-character-set-client-handshake
     volumes:
@@ -1148,17 +1162,13 @@ services:
   mc-observability-manager:
     image: cloudbaristaorg/mc-observability:edge
     container_name: mc-observability-manager
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - mc-observability-network
       - mc-cost-optimizer-network
       - mc-infra-manager-network
       - mc-infra-connector-network
       - mc-web-console-network
-    ports:
-      - target: 18080
-        published: ${MC_OBSERVABILITY_MANAGER_PORT}
-        protocol: tcp
     depends_on:
       mc-observability-grafana:
         condition: service_healthy
@@ -1184,28 +1194,27 @@ services:
       - grafana_shared_config:/grafana_config:ro
     healthcheck:
       test: [ "CMD", "/app/tool/mcc", "rest", "get", "http://localhost:18080/api/docs" ]
-      <<: *default-health-check
+      interval: ${HEALTH_CHECK_INTERVAL:-1m}
+      timeout: ${HEALTH_CHECK_TIMEOUT:-5s}
+      retries: ${HEALTH_CHECK_RETRIES:-3}
+      start_period: 5m
 
   mc-observability-front:
     image: cloudbaristaorg/mc-observability-front:edge
     container_name: mc-observability-front
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - mc-observability-network
       - mc-infra-manager-network
       - mc-infra-connector-network
-    ports:
-      - target: 18081
-        published: ${MC_OBSERVABILITY_FRONT_PORT}
-        protocol: tcp
     depends_on:
       mc-observability-manager:
-        condition: service_healthy
+        condition: service_started
 
   mc-observability-infra:
     image: cloudbaristaorg/mc-observability-infra:edge
     container_name: mc-observability-infra
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - mc-observability-network
     ports:
@@ -1253,7 +1262,7 @@ services:
   mc-observability-rabbitmq:
     image: rabbitmq:4.1.4-management-alpine
     container_name: mc-observability-rabbitmq
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - mc-observability-network
     ports:
@@ -1291,7 +1300,7 @@ services:
   mc-observability-maria:
     image: mariadb:10.11.11
     container_name: mc-observability-maria
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - mc-observability-network
     ports:
@@ -1330,7 +1339,7 @@ services:
   mc-observability-influx:
     image: cloudbaristaorg/mc-observability-influx:edge
     container_name: mc-observability-influx
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - mc-observability-network
     ports:
@@ -1367,7 +1376,7 @@ services:
   mc-observability-influx-2:
     image: cloudbaristaorg/mc-observability-influx:edge
     container_name: mc-observability-influx-2
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - mc-observability-network
     ports:
@@ -1421,7 +1430,7 @@ services:
   mc-observability-loki:
     image: grafana/loki:3.4.2
     container_name: mc-observability-loki
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - mc-observability-network
     ports:
@@ -1505,7 +1514,7 @@ services:
   mc-observability-grafana:
     image: cloudbaristaorg/mc-observability-grafana:edge
     container_name: mc-observability-grafana
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - mc-observability-network
     ports:

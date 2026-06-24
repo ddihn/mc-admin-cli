@@ -629,7 +629,7 @@ services:
       - mc-web-console-network
     ports:
       - target: 8095
-        published: ${CO_GCP_COLLECTOR_PORT}
+        published: ${MC_COST_OPTIMIZER_GCP_COLLECTOR_PORT}
         protocol: tcp
     depends_on:
       - mc-cost-optimizer-db
@@ -790,7 +790,7 @@ services:
       - mc-web-console-network
     ports:
       - target: 8096
-        published: ${CO_ML_SCORER_PORT}
+        published: ${MC_COST_OPTIMIZER_ML_SCORER_PORT}
         protocol: tcp
     depends_on:
       - mc-cost-optimizer-db

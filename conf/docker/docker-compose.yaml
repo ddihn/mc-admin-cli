@@ -479,6 +479,7 @@ services:
       spring.datasource.hikari.batch.jdbc-url: ${MC_COST_OPTIMIZER_COST_DB_URL}
       spring.datasource.hikari.batch.username: ${MC_COST_OPTIMIZER_MYSQL_USER}
       spring.datasource.hikari.batch.password: ${MC_COST_OPTIMIZER_MYSQL_PASSWORD}
+      ALARM_SERVICE: ${MC_COST_OPTIMIZER_ALARM_URL}
 
       OPENBAO_ENABLED: ${MC_COST_OPTIMIZER_OPENBAO_ENABLED}
       OPENBAO_ADDRESS: ${MC_COST_OPTIMIZER_OPENBAO_ADDRESS}
